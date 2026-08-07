@@ -71,11 +71,161 @@ Si un élément manque dans ce que fournit l'auteur, dis-le explicitement et dem
 un vide par une invention. Sois structuré, précis et actionnable.
 """.strip()
 
-FOCUS_HINT = {
-    "Général": "",
-    "Résumé": "L'auteur travaille sur son RÉSUMÉ / ABSTRACT.",
-    "Discussion": "L'auteur travaille sur sa DISCUSSION.",
-    "Conclusion": "L'auteur travaille sur sa CONCLUSION.",
+# --------------------------------------------------------------------------- #
+# Agents spécialisés                                                           #
+# --------------------------------------------------------------------------- #
+# Chaque agent = une consigne de tâche greffée sur le prompt de méthodologie.
+# `task` sert aussi de message d'amorçage quand on clique « Lancer l'agent ».
+RULE_CORPUS = (
+    "Tu travailles EXCLUSIVEMENT sur les documents joints par l'auteur. "
+    "N'utilise aucune connaissance extérieure, n'invente aucun article, aucun auteur, "
+    "aucune année, aucun chiffre. Si les documents ne permettent pas de répondre à un "
+    "point, écris-le explicitement plutôt que de deviner. Cite toujours les articles "
+    "par leur nom de fichier ou leur référence telle qu'elle apparaît dans le document."
+)
+
+AGENTS = {
+    "Général — rédaction": {
+        "desc": "Aide libre à la rédaction scientifique.",
+        "prompt": "",
+        "task": "",
+    },
+    "Résumé / Abstract": {
+        "desc": "Rédige un résumé aux normes Fandohan.",
+        "prompt": "L'auteur travaille sur son RÉSUMÉ / ABSTRACT.",
+        "task": "Rédige mon résumé à partir des éléments fournis.",
+    },
+    "Discussion": {
+        "desc": "Structure la discussion.",
+        "prompt": "L'auteur travaille sur sa DISCUSSION.",
+        "task": "Rédige ma discussion à partir des éléments fournis.",
+    },
+    "Conclusion": {
+        "desc": "Rédige la conclusion.",
+        "prompt": "L'auteur travaille sur sa CONCLUSION.",
+        "task": "Rédige ma conclusion à partir des éléments fournis.",
+    },
+
+    "🔍 Contradictions entre auteurs": {
+        "desc": "Repère les affirmations mutuellement exclusives.",
+        "prompt": RULE_CORPUS + """
+
+MISSION — DÉTECTION DE CONTRADICTIONS.
+Sur l'ensemble des documents joints, identifie les points les plus significatifs où deux auteurs
+ou plus formulent des affirmations qui se contredisent DIRECTEMENT.
+N'inclus que les vraies contradictions : des affirmations mutuellement exclusives sur le même
+sujet. Exclus les simples différences d'emphase, de périmètre ou de vocabulaire.
+Vise 5 à 10 contradictions si le corpus le permet ; s'il y en a moins, dis-le et n'en fabrique pas.
+Présente le résultat sous forme de TABLEAU markdown avec exactement ces colonnes :
+| Affirmation contestée | Position A (Article, Année) | Position B (Article, Année) | Cause racine du désaccord |
+Pour « Cause racine », choisis parmi : méthodologie, dataset, définition, période/contexte, échelle.
+Ajoute une phrase d'explication après le tableau pour les deux contradictions les plus lourdes.""",
+        "task": "Analyse les contradictions entre les auteurs des documents joints.",
+    },
+
+    "🌳 Généalogie des concepts": {
+        "desc": "Retrace l'histoire intellectuelle des concepts clés.",
+        "prompt": RULE_CORPUS + """
+
+MISSION — GÉNÉALOGIE DES CONCEPTS.
+Identifie les 3 concepts qui apparaissent le plus fréquemment dans plusieurs articles du corpus
+(nommés explicitement, débattus, ou servant de fondation à d'autres travaux).
+Pour chacun, retrace son histoire intellectuelle en te fondant UNIQUEMENT sur les documents joints,
+sous forme de plan structuré :
+
+**Nom du concept**
+• Origine — qui l'a introduit ou défini en premier dans cet ensemble ?
+• Remise en question — quel(s) article(s) l'ont questionné ou contesté, et comment ?
+• Raffinement — quel(s) article(s) l'ont modifié ou étendu, et comment ?
+• Statut actuel — établi, contesté, ou encore en évolution, selon cette littérature ?
+
+Si un concept n'a pas de contestataire ou de raffinement clairement identifiable dans ces articles,
+écris-le explicitement (« aucun challenger identifié dans ce corpus ») plutôt que de le deviner.""",
+        "task": "Retrace la généalogie des concepts clés des documents joints.",
+    },
+
+    "🕳 Lacunes de recherche": {
+        "desc": "Identifie et classe les questions sans réponse.",
+        "prompt": RULE_CORPUS + """
+
+MISSION — LACUNES DE RECHERCHE.
+Identifie les 5 lacunes les plus significatives que ces articles reconnaissent collectivement,
+sous-entendent, ou omettent d'aborder. Pour chacune :
+
+• **Lacune** — formule la question sans réponse en 1 à 2 phrases.
+• **Pourquoi elle existe** — choisis parmi : obstacle méthodologique, manque de données,
+  sujet trop de niche, supposé mais non testé, contrainte éthique/logistique. Explique brièvement.
+• **Article le plus proche** — quel document s'en est le plus approché, et où a-t-il échoué ?
+• **Chemin vers la résolution** — méthodologie, données, ressources nécessaires.
+
+Classe ensuite les 5 lacunes de la plus à la moins significative, et explique en deux phrases ton
+critère de classement (importance théorique, impact pratique, faisabilité de résolution).
+Si moins de 5 lacunes authentiques existent, liste seulement celles que tu peux étayer et explique
+pourquoi le corpus est limité.""",
+        "task": "Identifie les lacunes de recherche dans les documents joints.",
+    },
+
+    "⚠️ Hypothèses non testées": {
+        "desc": "Débusque les présupposés jamais justifiés.",
+        "prompt": RULE_CORPUS + """
+
+MISSION — HYPOTHÈSES IMPLICITES.
+Identifie les 5 à 8 hypothèses les plus conséquentes que la majorité de ces articles partagent
+sans jamais les tester, les justifier, ni les reconnaître explicitement comme des hypothèses.
+Concentre-toi sur celles qui sont à la fois (a) fondamentales pour les conclusions tirées et
+(b) plausiblement fausses ou dépendantes du contexte. Pour chacune :
+
+• **Hypothèse** — formule-la comme une affirmation déclarative (ex. « X cause Y dans toutes les conditions »).
+• **Partagée par** — nomme 2 à 3 articles qui s'appuient dessus le plus fortement.
+• **Niveau de risque** — Faible / Moyen / Élevé, selon l'étendue des dégâts causés à la littérature
+  si l'hypothèse s'avérait fausse.
+• **Conséquence** — qu'est-ce qui changerait ? Quelles conclusions demanderaient une révision ?
+
+Classe les hypothèses de la plus à la moins conséquente.""",
+        "task": "Débusque les hypothèses non testées des documents joints.",
+    },
+
+    "🗺 Carte de connaissances": {
+        "desc": "Cartographie structurée de la littérature.",
+        "prompt": RULE_CORPUS + """
+
+MISSION — CARTE DE CONNAISSANCES.
+Produis une carte structurée de cette littérature, en PLAN CLAIR, sans paragraphes rédigés.
+
+**CARTE DE CONNAISSANCES**
+1. **Affirmation centrale** — la proposition unique que la majorité des travaux cherche à soutenir,
+   contester ou affiner. Si aucune affirmation unique n'unifie le corpus, nomme 2 centres concurrents.
+2. **Piliers de soutien (3 à 5)** — sous-affirmations bien établies, à fort appui factuel sur
+   plusieurs articles. Format : [Affirmation] — soutenue par : Article 1, Article 2.
+3. **Zones contestées (2 à 3)** — désaccords authentiques et actifs.
+   Format : [Problème] — [Position A] vs [Position B].
+4. **Questions de frontière (1 à 2)** — questions que cette littérature soulève sans pouvoir y
+   répondre. Formule-les comme des questions explicites.
+5. **Liste de lecture pour nouveaux arrivants (3 articles)** — pour chacun : [Auteur, Année] —
+   pourquoi le lire en premier. Critère : fondamental pour comprendre le domaine, pas le plus cité.""",
+        "task": "Dresse la carte de connaissances des documents joints.",
+    },
+
+    "💡 Synthèse pour non-expert": {
+        "desc": "Trois points, sans jargon.",
+        "prompt": RULE_CORPUS + """
+
+MISSION — VULGARISATION.
+Résume l'ensemble de ce corpus pour une personne intelligente qui n'y connaît rien.
+Réponds en EXACTEMENT trois points numérotés, de 2 à 3 phrases chacun maximum.
+
+1. **Ce qui a été prouvé** — la découverte la plus solide et la plus fiable, formulée comme une
+   affirmation directe, sans réserve. Pas de « suggère », pas de « pourrait indiquer ».
+2. **Ce qui reste inconnu** — la chose la plus significative que ce domaine n'a pas résolue,
+   formulée honnêtement, sans minimiser l'incertitude.
+3. **Pourquoi ça compte** — l'implication concrète la plus importante. Si aucune application
+   directe n'existe, formule la conséquence théorique majeure.
+
+Règles strictes : pas de jargon, pas de citations, pas de chiffres non expliqués.
+Si le corpus ne permet pas d'affirmer l'un de ces points avec confiance, dis-le — ne fabrique
+aucune certitude.""",
+        "task": "Résume ce corpus pour un non-expert.",
+    },
 }
 
 # --------------------------------------------------------------------------- #
@@ -383,8 +533,10 @@ def login_page():
 # Marqueur qui sépare le message de l'auteur du contenu des fichiers, pour
 # pouvoir replier les documents à l'affichage sans les cacher au modèle.
 DOC_MARK = "\n\n----- DOCUMENTS JOINTS -----\n"
-MAX_CHARS_FILE = 6000      # ~1 500 tokens par fichier
-MAX_CHARS_TOTAL = 12000    # ~3 000 tokens au total : le quota Groq est étroit
+# Plafonds calés sur la limite Groq de 12 000 tokens/minute : 32 000 caractères
+# ≈ 8 000 tokens, auxquels s'ajoutent le prompt système et la réponse.
+MAX_CHARS_FILE = 12000
+MAX_CHARS_TOTAL = 32000
 
 def extract_text(f) -> str:
     """Texte brut d'un fichier téléversé. Les erreurs sont signalées, pas masquées."""
@@ -442,12 +594,28 @@ def friendly_error(e: Exception) -> str:
         return f"le modèle « {MODEL} » n'est pas disponible sur ce compte Groq."
     return s
 
+MAX_HISTORY_CHARS = 40000   # ~10 000 tokens : plafond par requête sur le palier gratuit
+
+def trim_history(msgs):
+    """Ne renvoie que la fin de la conversation.
+
+    L'historique complet repart à chaque tour ; avec des documents joints, la
+    3e question dépasserait la limite de 12 000 tokens/minute de Groq. On garde
+    donc les messages les plus récents dans un budget de caractères fixe.
+    """
+    kept, budget = [], MAX_HISTORY_CHARS
+    for m in reversed(msgs):
+        budget -= len(m["content"])
+        if budget < 0 and kept:
+            break
+        kept.append({"role": m["role"], "content": m["content"]})
+    return list(reversed(kept))
+
 def stream_reply():
     """Flux de la réponse du modèle pour l'historique courant."""
-    sys = SYSTEM_PROMPT + ("\n\n" + FOCUS_HINT.get(st.session_state.get("focus", "Général"), ""))
-    api_msgs = [{"role": "system", "content": sys}] + [
-        {"role": m["role"], "content": m["content"]} for m in st.session_state.messages
-    ]
+    agent = AGENTS.get(st.session_state.get("agent", "Général — rédaction"), {})
+    sys = SYSTEM_PROMPT + ("\n\n" + agent.get("prompt", ""))
+    api_msgs = [{"role": "system", "content": sys}] + trim_history(st.session_state.messages)
     stream = groq_client(GROQ_API_KEY).chat.completions.create(
         model=MODEL, messages=api_msgs, temperature=0.4, stream=True)
     for chunk in stream:
@@ -467,8 +635,16 @@ def chat_page():
             st.session_state.messages = []
             st.rerun()
 
-        focus = st.selectbox("Focus", list(FOCUS_HINT.keys()))
-        st.session_state.focus = focus
+        agent_name = st.selectbox("Agent", list(AGENTS.keys()),
+                                  help="Chaque agent applique une méthode d'analyse différente.")
+        st.session_state.agent = agent_name
+        agent = AGENTS[agent_name]
+        st.caption(agent["desc"])
+        if agent["task"]:
+            if st.button("▶  Lancer cet agent", use_container_width=True,
+                         key="run_agent"):
+                st.session_state.queued_prompt = agent["task"]
+                st.rerun()
 
         st.markdown("**Mes discussions**")
         convs = db_list_conversations(uid)
@@ -579,7 +755,7 @@ def chat_page():
                    f"et {MAX_CHARS_TOTAL:,} au total, pour rester dans le quota Groq."
                    .replace(",", " "))
 
-    prompt = st.chat_input("Écris ton message…")
+    prompt = st.chat_input("Écris ton message…") or st.session_state.pop("queued_prompt", None)
     if prompt:
         # créer la conversation au 1er message (titre = texte seul, sans les fichiers)
         if not st.session_state.current_conv:
