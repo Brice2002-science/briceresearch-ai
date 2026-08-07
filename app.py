@@ -181,6 +181,17 @@ def inject_css():
         --bra-gold:#BE8A2C; --bra-line:rgba(18,32,28,.10); --bra-wash:#F6FAF8;
       }
 
+      /* Barre d'outils Streamlit (Share, étoile, crayon, GitHub, menu ⋮) masquée.
+         On garde l'en-tête lui-même : c'est lui qui porte le bouton d'ouverture
+         de la barre latérale sur mobile. */
+      [data-testid="stToolbar"], [data-testid="stToolbarActions"],
+      [data-testid="stMainMenu"], [data-testid="stAppDeployButton"],
+      [data-testid="stDecoration"], [data-testid="manage-app-button"],
+      #MainMenu, footer { display:none !important; }
+      header[data-testid="stHeader"] { background:transparent; height:2.6rem; }
+      [data-testid="stSidebarCollapseButton"],
+      [data-testid="stSidebarCollapsedControl"] { display:flex !important; }
+
       /* Fond blanc, avec un voile vert à peine perceptible en haut de page */
       .stApp { background:
         linear-gradient(180deg, #F3F8F6 0%, #FFFFFF 340px, #FFFFFF 100%); }
@@ -190,11 +201,15 @@ def inject_css():
 
       section[data-testid="stSidebar"] {
         background:var(--bra-wash); border-right:1px solid var(--bra-line); }
-      section[data-testid="stSidebar"] .stButton>button {
+      /* Boutons de l'historique : plats, alignés à gauche (le bouton "Nouvelle
+         discussion" est en primary et garde son fond vert). */
+      section[data-testid="stSidebar"] .stButton>button:not([kind="primary"]) {
         background:transparent; border:1px solid transparent; color:var(--bra-ink);
         text-align:left; justify-content:flex-start; font-weight:450; }
-      section[data-testid="stSidebar"] .stButton>button:hover {
+      section[data-testid="stSidebar"] .stButton>button:not([kind="primary"]):hover {
         background:#FFFFFF; border-color:var(--bra-line); color:var(--bra-green); }
+      section[data-testid="stSidebar"] .stButton>button[kind="primary"] {
+        margin-bottom:.4rem; }
 
       /* Identité */
       .bra-brand { display:flex; align-items:center; gap:11px; margin:2px 0 20px; }
@@ -284,10 +299,11 @@ def login_page():
 def chat_page():
     uid = st.session_state.user_id
 
-    # ---- Sidebar ----
+    # ---- Panneau latéral : nouvelle discussion + historique ----
     with st.sidebar:
         brand_block()
-        if st.button("＋  Nouvelle discussion", use_container_width=True):
+
+        if st.button("＋  Nouvelle discussion", type="primary", use_container_width=True):
             st.session_state.current_conv = None
             st.session_state.messages = []
             st.rerun()
@@ -296,9 +312,16 @@ def chat_page():
         st.session_state.focus = focus
 
         st.markdown("**Mes discussions**")
-        for c in db_list_conversations(uid):
-            label = c["title"] or "Sans titre"
-            if st.button(("• " + label)[:34], key="c_" + c["id"], use_container_width=True):
+        convs = db_list_conversations(uid)
+        if not convs:
+            st.caption("Tes discussions apparaîtront ici dès ton premier message.")
+        for c in convs:
+            label = (c["title"] or "Sans titre").strip()
+            if len(label) > 32:
+                label = label[:32].rstrip() + "…"
+            active = c["id"] == st.session_state.get("current_conv")
+            if st.button(("●  " if active else "○  ") + label,
+                         key="c_" + c["id"], use_container_width=True):
                 st.session_state.current_conv = c["id"]
                 st.session_state.messages = db_load_messages(c["id"])
                 st.rerun()
@@ -362,7 +385,8 @@ def chat_page():
 # --------------------------------------------------------------------------- #
 def main():
     icon = str(APP_DIR / "logo-icon.png") if (APP_DIR / "logo-icon.png").exists() else "🌿"
-    st.set_page_config(page_title="BRICERESEARCH AI", page_icon=icon, layout="centered")
+    st.set_page_config(page_title="BRICERESEARCH AI", page_icon=icon, layout="centered",
+                       initial_sidebar_state="expanded")
     inject_css()
 
     missing = [n for n, v in [("GROQ_API_KEY", GROQ_API_KEY),
