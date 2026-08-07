@@ -176,30 +176,78 @@ LOGO_SVG = (APP_DIR / "logo-icon.svg").read_text(encoding="utf-8") if (APP_DIR /
 def inject_css():
     st.markdown("""
     <style>
+      :root {
+        --bra-ink:#12201C; --bra-muted:#67807A; --bra-green:#0F6B57;
+        --bra-gold:#BE8A2C; --bra-line:rgba(18,32,28,.10); --bra-wash:#F6FAF8;
+      }
+
+      /* Fond blanc, avec un voile vert à peine perceptible en haut de page */
       .stApp { background:
-        radial-gradient(120% 90% at 85% -10%, #14463C 0%, #0B241F 55%, #071813 100%); }
-      section[data-testid="stSidebar"] { background:#0B241F; border-right:1px solid rgba(255,255,255,0.08); }
-      .bra-brand { display:flex; align-items:center; gap:10px; margin:4px 0 14px; }
-      .bra-brand svg { width:38px; height:38px; }
-      .bra-brand h2 { font-size:18px; margin:0; color:#FBF8F1; letter-spacing:.3px; font-weight:700; }
-      .bra-brand small { color:#9FB8B0; font-size:11px; }
-      .stChatMessage { background:transparent; }
-      [data-testid="stChatMessageContent"] { font-size:15px; line-height:1.65; }
-      .stButton>button { border-radius:9px; }
-      .bra-login-card { max-width:420px; margin:6vh auto 0; padding:26px 26px 12px;
-        background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); border-radius:16px; }
-      .bra-hero { text-align:center; margin-bottom:6px; }
-      .bra-hero svg { width:64px; height:64px; }
-      .bra-hero h1 { font-size:24px; margin:10px 0 2px; color:#FBF8F1; }
-      .bra-hero p { color:#9FB8B0; font-size:13px; margin:0 0 8px; }
+        linear-gradient(180deg, #F3F8F6 0%, #FFFFFF 340px, #FFFFFF 100%); }
+
+      /* Colonne de lecture : largeur confortable, respiration verticale */
+      .block-container { max-width:47rem; padding-top:3rem; padding-bottom:7rem; }
+
+      section[data-testid="stSidebar"] {
+        background:var(--bra-wash); border-right:1px solid var(--bra-line); }
+      section[data-testid="stSidebar"] .stButton>button {
+        background:transparent; border:1px solid transparent; color:var(--bra-ink);
+        text-align:left; justify-content:flex-start; font-weight:450; }
+      section[data-testid="stSidebar"] .stButton>button:hover {
+        background:#FFFFFF; border-color:var(--bra-line); color:var(--bra-green); }
+
+      /* Identité */
+      .bra-brand { display:flex; align-items:center; gap:11px; margin:2px 0 20px; }
+      .bra-brand svg { width:36px; height:36px; border-radius:10px; }
+      .bra-brand h2 { font-size:16px; margin:0; color:var(--bra-ink);
+        letter-spacing:-.01em; font-weight:650; }
+      .bra-brand small { color:var(--bra-muted); font-size:11px; }
+
+      .bra-hero { text-align:center; margin:2vh 0 10px; }
+      .bra-hero svg { width:60px; height:60px; border-radius:17px;
+        box-shadow:0 10px 28px -14px rgba(15,107,87,.55); }
+      .bra-hero h1 { font-family:Georgia,'Iowan Old Style','Times New Roman',serif;
+        font-size:30px; font-weight:600; letter-spacing:-.02em;
+        margin:16px 0 0; color:var(--bra-ink); }
+
+      /* Messages : l'assistant sur carte verte pâle, l'auteur sur carte blanche */
+      .stChatMessage { background:transparent; padding:.2rem 0; }
+      [data-testid="stChatMessageContent"] {
+        font-size:15.5px; line-height:1.7; color:var(--bra-ink); }
+      .stChatMessage:has([data-testid="stChatMessageAvatarAssistant"]) {
+        background:var(--bra-wash); border:1px solid var(--bra-line);
+        border-radius:16px; padding:.7rem 1.15rem; margin:.4rem 0; }
+      .stChatMessage:has([data-testid="stChatMessageAvatarUser"]) {
+        background:#FFFFFF; border:1px solid var(--bra-line);
+        border-radius:16px; padding:.7rem 1.15rem; margin:.4rem 0;
+        box-shadow:0 1px 2px rgba(18,32,28,.04); }
+
+      /* Zone de saisie */
+      [data-testid="stChatInput"] {
+        border:1px solid var(--bra-line); border-radius:14px; background:#FFFFFF;
+        box-shadow:0 2px 6px rgba(18,32,28,.05), 0 16px 40px -28px rgba(18,32,28,.35); }
+      [data-testid="stChatInput"]:focus-within { border-color:var(--bra-green); }
+
+      /* Boutons */
+      .stButton>button { border-radius:10px; font-weight:500; }
+      .stButton>button[kind="primary"] { border:none;
+        box-shadow:0 1px 2px rgba(15,107,87,.25), 0 8px 20px -12px rgba(15,107,87,.7); }
+
+      /* Carte de connexion */
+      .bra-login-card { max-width:430px; margin:4vh auto 0; padding:30px 30px 14px;
+        background:#FFFFFF; border:1px solid var(--bra-line); border-radius:20px;
+        box-shadow:0 1px 2px rgba(18,32,28,.04), 0 24px 56px -32px rgba(18,32,28,.30); }
+      .bra-login-card .stTabs [data-baseweb="tab-list"] { gap:6px; }
+
+      .stCaption, [data-testid="stCaptionContainer"] { color:var(--bra-muted); }
+      hr, [data-testid="stDivider"] { border-color:var(--bra-line); }
     </style>
     """, unsafe_allow_html=True)
 
 def brand_block(hero=False):
     cls = "bra-hero" if hero else "bra-brand"
     if hero:
-        st.markdown(f'<div class="{cls}">{LOGO_SVG}<h1>BRICERESEARCH AI</h1>'
-                    f'<p>Rédaction scientifique · méthodologie Pr Fandohan (EForT/UNA)</p></div>',
+        st.markdown(f'<div class="{cls}">{LOGO_SVG}<h1>BRICERESEARCH AI</h1></div>',
                     unsafe_allow_html=True)
     else:
         st.markdown(f'<div class="{cls}">{LOGO_SVG}<div><h2>BRICERESEARCH AI</h2>'
