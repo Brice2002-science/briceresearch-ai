@@ -323,6 +323,46 @@ def login_page():
                    "BRICERESEARCH AI ne voit jamais ton mot de passe.")
 
 # --------------------------------------------------------------------------- #
+# Documents joints                                                             #
+# --------------------------------------------------------------------------- #
+# Marqueur qui sépare le message de l'auteur du contenu des fichiers, pour
+# pouvoir replier les documents à l'affichage sans les cacher au modèle.
+DOC_MARK = "\n\n----- DOCUMENTS JOINTS -----\n"
+MAX_CHARS_FILE = 6000      # ~1 500 tokens par fichier
+MAX_CHARS_TOTAL = 12000    # ~3 000 tokens au total : le quota Groq est étroit
+
+def extract_text(f) -> str:
+    """Texte brut d'un fichier téléversé. Les erreurs sont signalées, pas masquées."""
+    name = (f.name or "").lower()
+    try:
+        if name.endswith(".pdf"):
+            from pypdf import PdfReader
+            return "\n".join((p.extract_text() or "") for p in PdfReader(f).pages)
+        if name.endswith(".docx"):
+            import docx
+            return "\n".join(p.text for p in docx.Document(f).paragraphs)
+        return f.getvalue().decode("utf-8", errors="replace")
+    except Exception as e:
+        return f"[Lecture impossible : {e}]"
+
+def build_attachments(files) -> str:
+    """Assemble les fichiers en un bloc de contexte, tronqué pour tenir le quota."""
+    if not files:
+        return ""
+    parts, budget = [], MAX_CHARS_TOTAL
+    for f in files:
+        if budget <= 0:
+            parts.append(f"\n### {f.name}\n[Non transmis : limite de taille atteinte.]")
+            continue
+        txt = (extract_text(f) or "").strip()
+        cap = min(MAX_CHARS_FILE, budget)
+        if len(txt) > cap:
+            txt = txt[:cap] + "\n[…texte tronqué pour rester dans le quota…]"
+        budget -= len(txt)
+        parts.append(f"\n### {f.name}\n{txt or '[Fichier vide ou illisible.]'}")
+    return DOC_MARK + "\n".join(parts)
+
+# --------------------------------------------------------------------------- #
 # Génération                                                                   #
 # --------------------------------------------------------------------------- #
 def key_fingerprint() -> str:
@@ -401,14 +441,21 @@ def chat_page():
 
     if not st.session_state.messages:
         brand_block(hero=True)
-        st.caption("Colle ton titre, tes objectifs, ta méthodo et tes résultats — puis demande un résumé, "
-                   "une discussion ou une conclusion. Choisis un *Focus* dans la barre latérale.")
+        st.caption("Colle ton titre, tes objectifs, ta méthodo et tes résultats — ou joins tes "
+                   "documents avec 📎 — puis demande un résumé, une discussion ou une conclusion. "
+                   "Choisis un *Focus* dans la barre latérale.")
 
     # ---- Messages, avec leurs actions (copier / réessayer) ----
     last = len(st.session_state.messages) - 1
     for i, m in enumerate(st.session_state.messages):
         with st.chat_message(m["role"], avatar=("🌿" if m["role"] == "assistant" else None)):
-            st.markdown(m["content"])
+            if DOC_MARK in m["content"]:
+                head, docs = m["content"].split(DOC_MARK, 1)
+                st.markdown(head)
+                with st.expander("📎 Documents joints"):
+                    st.text(docs)
+            else:
+                st.markdown(m["content"])
 
             act = st.container()
             act.markdown('<div class="bra-actions"></div>', unsafe_allow_html=True)
@@ -452,15 +499,28 @@ def chat_page():
                 {"id": mid, "role": "assistant", "content": reply})
         st.rerun()
 
+    # ---- Pièces jointes ----
+    round_key = st.session_state.get("up_round", 0)
+    with st.expander("📎  Joindre des documents (PDF, Word, texte, CSV)"):
+        files = st.file_uploader(
+            "Le contenu sera transmis avec ton prochain message.",
+            accept_multiple_files=True, key=f"uploader_{round_key}",
+            type=["pdf", "docx", "txt", "md", "csv"])
+        st.caption(f"Extraction limitée à {MAX_CHARS_FILE:,} caractères par fichier "
+                   f"et {MAX_CHARS_TOTAL:,} au total, pour rester dans le quota Groq."
+                   .replace(",", " "))
+
     prompt = st.chat_input("Écris ton message…")
     if prompt:
-        # créer la conversation au 1er message
+        # créer la conversation au 1er message (titre = texte seul, sans les fichiers)
         if not st.session_state.current_conv:
             st.session_state.current_conv = db_create_conversation(uid, prompt)
         conv = st.session_state.current_conv
 
-        mid = db_save_message(conv, uid, "user", prompt) if conv else None
-        st.session_state.messages.append({"id": mid, "role": "user", "content": prompt})
+        content = prompt + build_attachments(files)
+        mid = db_save_message(conv, uid, "user", content) if conv else None
+        st.session_state.messages.append({"id": mid, "role": "user", "content": content})
+        st.session_state.up_round = round_key + 1     # vide le téléverseur
         st.session_state.pending = True
         st.rerun()
 
