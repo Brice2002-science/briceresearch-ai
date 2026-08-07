@@ -191,21 +191,26 @@ def _oauth_client(sid: str) -> Client:
                          options=ClientOptions(flow_type="pkce",
                                                storage=_SidStorage(store)))
 
-def github_login_url() -> str | None:
-    """URL de consentement GitHub, calculée une seule fois par session."""
-    if st.session_state.get("gh_url"):
-        return st.session_state.gh_url
+def oauth_url(provider: str) -> str | None:
+    """URL de consentement du fournisseur, calculée une seule fois par session.
+
+    Le même bouton sert à l'inscription et à la connexion : au premier passage,
+    Supabase crée le compte à partir de l'identité renvoyée par le fournisseur.
+    """
+    cache_key = f"oauth_url_{provider}"
+    if st.session_state.get(cache_key):
+        return st.session_state[cache_key]
     sid = pysecrets.token_urlsafe(16)
     try:
         res = _oauth_client(sid).auth.sign_in_with_oauth({
-            "provider": "github",
+            "provider": provider,
             "options": {"redirect_to": f"{APP_URL}?sid={sid}"},
         })
         store = _pkce_store()
         if len(store) > 200:                     # purge grossière, évite la fuite mémoire
             for k in list(store)[:100]:
                 store.pop(k, None)
-        st.session_state.gh_url = res.url
+        st.session_state[cache_key] = res.url
         return res.url
     except Exception:
         return None
@@ -338,11 +343,14 @@ def inject_css():
         background:#FFFFFF; border:1px solid var(--bra-line); border-radius:20px;
         padding:6px 22px 10px;
         box-shadow:0 1px 2px rgba(18,32,28,.04), 0 24px 56px -32px rgba(18,32,28,.30); }
-      /* Bouton GitHub + séparateur "ou par e-mail" */
+      /* Boutons de connexion externe + séparateur "ou par e-mail" */
       [data-testid="stLinkButton"] a {
-        background:#12201C; color:#FFFFFF; border:none; border-radius:10px;
-        font-weight:500; }
-      [data-testid="stLinkButton"] a:hover { background:#000000; color:#FFFFFF; }
+        background:#FFFFFF; color:var(--bra-ink);
+        border:1px solid var(--bra-line); border-radius:10px; font-weight:500;
+        box-shadow:0 1px 2px rgba(18,32,28,.04); }
+      [data-testid="stLinkButton"] a:hover {
+        background:var(--bra-wash); color:var(--bra-green);
+        border-color:var(--bra-green); }
       .bra-sep { display:flex; align-items:center; gap:12px;
         margin:14px 0 2px; color:var(--bra-muted); font-size:12px; }
       .bra-sep::before, .bra-sep::after {
@@ -387,10 +395,12 @@ def login_page():
     with mid:
         brand_block(hero=True)
         with st.container(border=True):
-            gh = github_login_url()
+            google, gh = oauth_url("google"), oauth_url("github")
+            if google:
+                st.link_button("Continuer avec Google", google, use_container_width=True)
             if gh:
-                st.link_button("＠  Continuer avec GitHub", gh,
-                               use_container_width=True)
+                st.link_button("Continuer avec GitHub", gh, use_container_width=True)
+            if google or gh:
                 st.markdown('<div class="bra-sep"><span>ou par e-mail</span></div>',
                             unsafe_allow_html=True)
 
