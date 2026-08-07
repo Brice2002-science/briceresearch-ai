@@ -6,34 +6,41 @@ Moteur : **Groq** (llama-3.3-70b). Comptes + sauvegarde des discussions : **Supa
 
 ---
 
+## État du déploiement
+
+| Étape | Statut |
+|---|---|
+| Dépôt GitHub | ✅ https://github.com/Brice2002-science/briceresearch-ai |
+| Base Supabase (tables + RLS) | ✅ projet `lfpzszauclmxahdvbrez` |
+| Inscription sans confirmation e-mail | ✅ activée |
+| Clé Groq | ⬜ à créer |
+| Déploiement Streamlit Cloud | ⬜ à faire |
+
 ## 0. Révoquer la clé exposée (obligatoire)
-La clé Groq que tu as partagée dans le chat est compromise. Va sur **console.groq.com → API Keys**,
+La clé Groq partagée en clair est compromise. Va sur **console.groq.com → API Keys**,
 supprime-la, crée-en une **neuve**. Elle ira dans un *secret*, jamais dans le code.
 
-## 1. Créer la base Supabase (comptes + discussions)
-1. **supabase.com → New project** (gratuit). Note le mot de passe de la base.
-2. **Project Settings → API** : copie **Project URL** (→ `SUPABASE_URL`) et la clé **anon public**
-   (→ `SUPABASE_ANON_KEY`).
-3. **SQL Editor → New query** : colle tout `schema.sql`, puis **Run**.
-4. **Authentication → Providers → Email** : pour une inscription fluide entre camarades, **désactive
-   "Confirm email"** (sinon chacun doit valider un e-mail avant de se connecter).
+## 1. Base Supabase — ✅ déjà fait
+Projet `lfpzszauclmxahdvbrez` (Central EU / Frankfurt). Le `schema.sql` a été exécuté
+(2 tables + Row Level Security), et « Confirm email » est désactivé pour que tes camarades
+s'inscrivent sans passer par une validation d'e-mail.
 
-## 2. Mettre les fichiers sur GitHub
-Crée un dépôt et pousse : `app.py`, `requirements.txt`, `schema.sql`, `logo-icon.svg`,
-`logo-icon.png`, et le dossier `.streamlit/` (avec `config.toml`).
-Ne mets **jamais** de clé dans ces fichiers.
+Pour refaire cette étape sur un autre projet : **SQL Editor → New query** → coller `schema.sql` → **Run**,
+puis **Authentication → Sign In / Providers → Confirm email : off**.
+
+## 2. GitHub — ✅ déjà fait
+Le dépôt public contient `app.py`, `requirements.txt`, `schema.sql`, les logos et `.streamlit/config.toml`.
+`.gitignore` exclut `.streamlit/secrets.toml` : **aucune clé ne peut partir sur GitHub**.
 
 ## 3. Déployer et obtenir l'URL
 
 ### Option A — Streamlit Community Cloud (recommandé, gratuit)
-1. **share.streamlit.io → New app** → choisis ton dépôt et `app.py`.
-2. **Advanced settings → Secrets**, colle (au format TOML) :
-   ```toml
-   GROQ_API_KEY = "ta_nouvelle_cle_groq"
-   SUPABASE_URL = "https://xxxx.supabase.co"
-   SUPABASE_ANON_KEY = "eyJhbGci...la_cle_anon..."
-   ```
-3. **Deploy**. Tu obtiens une URL type `https://briceresearch.streamlit.app` à envoyer à tes camarades.
+1. **share.streamlit.io → New app → From existing repo**
+   - Repository : `Brice2002-science/briceresearch-ai`
+   - Branch : `main` · Main file path : `app.py`
+2. **Advanced settings → Secrets**, colle le contenu de ton `.streamlit/secrets.toml` local
+   (format TOML, les 3 clés `GROQ_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`).
+3. **Deploy**. Tu obtiens une URL type `https://briceresearch-ai.streamlit.app` à envoyer à tes camarades.
 
 ### Option B — Hugging Face Spaces (gratuit)
 1. **huggingface.co → New Space → SDK : Streamlit**. Uploade les mêmes fichiers.
