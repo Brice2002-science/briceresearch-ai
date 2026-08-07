@@ -6,15 +6,18 @@ Moteur : **Groq** (llama-3.3-70b). Comptes + sauvegarde des discussions : **Supa
 
 ---
 
-## État du déploiement
+## 🚀 Application en ligne
+
+**https://briceresearch-ai.streamlit.app**
 
 | Étape | Statut |
 |---|---|
 | Dépôt GitHub | ✅ https://github.com/Brice2002-science/briceresearch-ai |
 | Base Supabase (tables + RLS) | ✅ projet `lfpzszauclmxahdvbrez` |
 | Inscription sans confirmation e-mail | ✅ activée |
-| Clé Groq | ⬜ à créer |
-| Déploiement Streamlit Cloud | ⬜ à faire |
+| Déploiement Streamlit Cloud | ✅ Python 3.12, secrets configurés |
+
+Le déploiement est **continu** : tout `git push` sur `main` redéploie l'app automatiquement.
 
 ## 0. Révoquer la clé exposée (obligatoire)
 La clé Groq partagée en clair est compromise. Va sur **console.groq.com → API Keys**,
@@ -47,10 +50,18 @@ Le dépôt public contient `app.py`, `requirements.txt`, `schema.sql`, les logos
 2. **Settings → Variables and secrets** : ajoute `GROQ_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`.
 3. Le Space se construit et te donne une URL publique.
 
-## 4. Utilisation
-Chaque camarade ouvre l'URL, **crée un compte** (e-mail + mot de passe), et discute. Ses conversations
-sont sauvegardées et rechargées à sa prochaine connexion. Focus (Résumé / Discussion / Conclusion /
-Général) dans la barre latérale.
+## 4. Utilisation — à transmettre aux étudiants
+
+> Ouvre **https://briceresearch-ai.streamlit.app**, onglet **Créer un compte** (e-mail + mot de passe
+> d'au moins 6 caractères). Tu es connecté immédiatement, sans validation d'e-mail.
+>
+> Colle ton titre, tes objectifs, ta méthodologie et tes résultats, puis demande un résumé, une
+> discussion ou une conclusion. Choisis le **Focus** correspondant dans la barre latérale.
+>
+> Tes discussions sont privées et rechargées à chaque connexion.
+
+Chacun ne voit **que** ses propres discussions : c'est garanti par la Row Level Security de Supabase
+(`auth.uid() = user_id` sur chaque table), pas seulement par l'interface.
 
 ---
 
