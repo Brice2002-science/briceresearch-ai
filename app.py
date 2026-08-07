@@ -118,18 +118,30 @@ def db_create_conversation(uid: str, title: str) -> str | None:
 
 def db_load_messages(conv_id: str):
     try:
-        r = (sb_client().table("messages").select("role,content,created_at")
+        r = (sb_client().table("messages").select("id,role,content,created_at")
              .eq("conversation_id", conv_id).order("created_at").execute())
-        return [{"role": m["role"], "content": m["content"]} for m in (r.data or [])]
+        return [{"id": m["id"], "role": m["role"], "content": m["content"]}
+                for m in (r.data or [])]
     except Exception:
         return []
 
-def db_save_message(conv_id: str, uid: str, role: str, content: str):
+def db_save_message(conv_id: str, uid: str, role: str, content: str) -> str | None:
+    """Enregistre un message et renvoie son id (nécessaire pour « Réessayer »)."""
     try:
-        sb_client().table("messages").insert(
-            {"conversation_id": conv_id, "user_id": uid, "role": role, "content": content}).execute()
+        r = sb_client().table("messages").insert(
+            {"conversation_id": conv_id, "user_id": uid,
+             "role": role, "content": content}).execute()
+        return r.data[0]["id"]
     except Exception as e:
         st.warning(f"Message non sauvegardé : {e}")
+        return None
+
+def db_delete_message(msg_id: str):
+    """Supprime un message : sinon une réponse ratée resterait dans l'historique."""
+    try:
+        sb_client().table("messages").delete().eq("id", msg_id).execute()
+    except Exception:
+        pass
 
 # --------------------------------------------------------------------------- #
 # Authentification                                                             #
@@ -256,6 +268,19 @@ def inject_css():
       .stTabs [data-baseweb="tab-list"] { gap:18px; }
       .stTabs [data-baseweb="tab-highlight"] { background:var(--bra-green); }
 
+      /* Actions sous chaque message : discrètes, elles ne doivent pas
+         concurrencer le texte de la réponse. */
+      .bra-actions { margin-top:.1rem; }
+      .stChatMessage [data-testid="stPopover"] button,
+      .stChatMessage .stButton>button {
+        background:transparent; border:1px solid transparent; color:var(--bra-muted);
+        font-size:12px; font-weight:450; padding:.1rem .45rem; min-height:0;
+        border-radius:8px; opacity:.75; }
+      .stChatMessage [data-testid="stPopover"] button:hover,
+      .stChatMessage .stButton>button:hover {
+        background:#FFFFFF; border-color:var(--bra-line);
+        color:var(--bra-green); opacity:1; }
+
       .stCaption, [data-testid="stCaptionContainer"] { color:var(--bra-muted); }
       hr, [data-testid="stDivider"] { border-color:var(--bra-line); }
     </style>
@@ -295,6 +320,36 @@ def login_page():
                         do_signup(e2, p2)
         st.caption("Tes identifiants sont gérés et chiffrés par Supabase Auth. "
                    "BRICERESEARCH AI ne voit jamais ton mot de passe.")
+
+# --------------------------------------------------------------------------- #
+# Génération                                                                   #
+# --------------------------------------------------------------------------- #
+def friendly_error(e: Exception) -> str:
+    """Traduit les pannes courantes en langage compréhensible par un étudiant."""
+    s = str(e)
+    if "invalid_api_key" in s or "401" in s:
+        return ("la clé Groq de l'application est invalide ou a été révoquée. "
+                "Signale-le à la personne qui administre l'application — "
+                "elle doit la mettre à jour dans les secrets Streamlit.")
+    if "rate_limit" in s or "429" in s:
+        return ("le quota de l'application est atteint pour le moment. "
+                "Réessaie dans quelques minutes.")
+    if "model_not_found" in s or "404" in s:
+        return f"le modèle « {MODEL} » n'est pas disponible sur ce compte Groq."
+    return s
+
+def stream_reply():
+    """Flux de la réponse du modèle pour l'historique courant."""
+    sys = SYSTEM_PROMPT + ("\n\n" + FOCUS_HINT.get(st.session_state.get("focus", "Général"), ""))
+    api_msgs = [{"role": "system", "content": sys}] + [
+        {"role": m["role"], "content": m["content"]} for m in st.session_state.messages
+    ]
+    stream = groq_client().chat.completions.create(
+        model=MODEL, messages=api_msgs, temperature=0.4, stream=True)
+    for chunk in stream:
+        d = chunk.choices[0].delta.content
+        if d:
+            yield d
 
 def chat_page():
     uid = st.session_state.user_id
@@ -340,9 +395,53 @@ def chat_page():
         st.caption("Colle ton titre, tes objectifs, ta méthodo et tes résultats — puis demande un résumé, "
                    "une discussion ou une conclusion. Choisis un *Focus* dans la barre latérale.")
 
-    for m in st.session_state.messages:
+    # ---- Messages, avec leurs actions (copier / réessayer) ----
+    last = len(st.session_state.messages) - 1
+    for i, m in enumerate(st.session_state.messages):
         with st.chat_message(m["role"], avatar=("🌿" if m["role"] == "assistant" else None)):
             st.markdown(m["content"])
+
+            act = st.container()
+            act.markdown('<div class="bra-actions"></div>', unsafe_allow_html=True)
+            c1, c2, _ = act.columns([1.1, 1.2, 5])
+            with c1:
+                with st.popover("📋 Copier", use_container_width=True):
+                    st.caption("Utilise l'icône de copie en haut à droite du bloc.")
+                    st.code(m["content"], language=None, wrap_lines=True)
+            # Réessayer : uniquement sur la dernière réponse de l'assistant
+            if m["role"] == "assistant" and i == last:
+                with c2:
+                    if st.button("↻ Réessayer", key=f"retry_{i}", use_container_width=True):
+                        dropped = st.session_state.messages.pop()
+                        if dropped.get("id"):
+                            db_delete_message(dropped["id"])
+                        st.session_state.pending = True
+                        st.rerun()
+
+    # ---- Erreur de génération : affichée hors historique, jamais sauvegardée ----
+    if st.session_state.get("gen_error"):
+        st.error(st.session_state.gen_error)
+        if st.button("↻ Réessayer", key="retry_after_error"):
+            st.session_state.gen_error = None
+            st.session_state.pending = True
+            st.rerun()
+
+    # ---- Génération en attente (nouveau message ou réessai) ----
+    if st.session_state.get("pending"):
+        st.session_state.pending = False
+        st.session_state.gen_error = None
+        conv = st.session_state.current_conv
+        with st.chat_message("assistant", avatar="🌿"):
+            try:
+                reply = st.write_stream(stream_reply())
+            except Exception as e:
+                st.session_state.gen_error = "La génération a échoué : " + friendly_error(e)
+                reply = None
+        if reply:
+            mid = db_save_message(conv, uid, "assistant", reply) if conv else None
+            st.session_state.messages.append(
+                {"id": mid, "role": "assistant", "content": reply})
+        st.rerun()
 
     prompt = st.chat_input("Écris ton message…")
     if prompt:
@@ -351,34 +450,10 @@ def chat_page():
             st.session_state.current_conv = db_create_conversation(uid, prompt)
         conv = st.session_state.current_conv
 
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-        if conv:
-            db_save_message(conv, uid, "user", prompt)
-
-        sys = SYSTEM_PROMPT + ("\n\n" + FOCUS_HINT.get(st.session_state.get("focus", "Général"), ""))
-        api_msgs = [{"role": "system", "content": sys}] + [
-            {"role": m["role"], "content": m["content"]} for m in st.session_state.messages
-        ]
-
-        with st.chat_message("assistant", avatar="🌿"):
-            try:
-                stream = groq_client().chat.completions.create(
-                    model=MODEL, messages=api_msgs, temperature=0.4, stream=True)
-                def gen():
-                    for chunk in stream:
-                        d = chunk.choices[0].delta.content
-                        if d:
-                            yield d
-                reply = st.write_stream(gen())
-            except Exception as e:
-                reply = f"Désolé, la génération a échoué : {e}"
-                st.error(reply)
-
-        st.session_state.messages.append({"role": "assistant", "content": reply})
-        if conv:
-            db_save_message(conv, uid, "assistant", reply)
+        mid = db_save_message(conv, uid, "user", prompt) if conv else None
+        st.session_state.messages.append({"id": mid, "role": "user", "content": prompt})
+        st.session_state.pending = True
+        st.rerun()
 
 # --------------------------------------------------------------------------- #
 # Entrée                                                                       #
