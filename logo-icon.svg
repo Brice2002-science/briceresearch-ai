@@ -1,0 +1,27 @@
+<svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="BRICERESEARCH AI">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#14463C"/>
+      <stop offset="1" stop-color="#0B241F"/>
+    </linearGradient>
+    <linearGradient id="leaf" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4FB79E"/>
+      <stop offset="1" stop-color="#2E7D6F"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#bg)"/>
+  <rect x="8.5" y="8.5" width="239" height="239" rx="55.5" fill="none" stroke="#BE8A2C" stroke-opacity="0.35"/>
+  <g transform="rotate(-18 120 120)">
+    <path d="M120 42 C82 78 78 150 120 202 C162 150 158 78 120 42 Z" fill="url(#leaf)"/>
+    <path d="M120 58 C120 110 120 160 120 196" fill="none" stroke="#0B241F" stroke-opacity="0.55" stroke-width="4" stroke-linecap="round"/>
+    <path d="M120 92 C108 96 100 104 94 116" fill="none" stroke="#0B241F" stroke-opacity="0.4" stroke-width="3.5" stroke-linecap="round"/>
+    <path d="M120 92 C132 96 140 104 146 116" fill="none" stroke="#0B241F" stroke-opacity="0.4" stroke-width="3.5" stroke-linecap="round"/>
+    <path d="M120 128 C108 132 100 140 95 152" fill="none" stroke="#0B241F" stroke-opacity="0.35" stroke-width="3.5" stroke-linecap="round"/>
+    <path d="M120 128 C132 132 140 140 145 152" fill="none" stroke="#0B241F" stroke-opacity="0.35" stroke-width="3.5" stroke-linecap="round"/>
+  </g>
+  <g>
+    <circle cx="170" cy="170" r="34" fill="none" stroke="#BE8A2C" stroke-width="12"/>
+    <circle cx="170" cy="170" r="34" fill="#FBF8F1" fill-opacity="0.06"/>
+    <line x1="196" y1="196" x2="220" y2="220" stroke="#BE8A2C" stroke-width="14" stroke-linecap="round"/>
+  </g>
+</svg>

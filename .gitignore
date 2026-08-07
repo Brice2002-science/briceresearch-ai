@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Secrets — ne JAMAIS committer
+.streamlit/secrets.toml
+.env
+
+# OS
+Thumbs.db
+.DS_Store
