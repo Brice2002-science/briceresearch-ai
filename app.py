@@ -233,11 +233,13 @@ def inject_css():
       .stButton>button[kind="primary"] { border:none;
         box-shadow:0 1px 2px rgba(15,107,87,.25), 0 8px 20px -12px rgba(15,107,87,.7); }
 
-      /* Carte de connexion */
-      .bra-login-card { max-width:430px; margin:4vh auto 0; padding:30px 30px 14px;
+      /* Cartes (st.container(border=True)) — carte de connexion */
+      [data-testid="stVerticalBlockBorderWrapper"]:has(.stTabs) {
         background:#FFFFFF; border:1px solid var(--bra-line); border-radius:20px;
+        padding:6px 22px 10px;
         box-shadow:0 1px 2px rgba(18,32,28,.04), 0 24px 56px -32px rgba(18,32,28,.30); }
-      .bra-login-card .stTabs [data-baseweb="tab-list"] { gap:6px; }
+      .stTabs [data-baseweb="tab-list"] { gap:18px; }
+      .stTabs [data-baseweb="tab-highlight"] { background:var(--bra-green); }
 
       .stCaption, [data-testid="stCaptionContainer"] { color:var(--bra-muted); }
       hr, [data-testid="stDivider"] { border-color:var(--bra-line); }
@@ -257,25 +259,27 @@ def brand_block(hero=False):
 # Pages                                                                        #
 # --------------------------------------------------------------------------- #
 def login_page():
-    st.markdown('<div class="bra-login-card">', unsafe_allow_html=True)
-    brand_block(hero=True)
-    tab_in, tab_up = st.tabs(["Se connecter", "Créer un compte"])
-    with tab_in:
-        e = st.text_input("E-mail", key="in_e")
-        p = st.text_input("Mot de passe", type="password", key="in_p")
-        if st.button("Se connecter", type="primary", use_container_width=True):
-            do_login(e, p)
-    with tab_up:
-        e2 = st.text_input("E-mail", key="up_e")
-        p2 = st.text_input("Mot de passe (≥ 6 caractères)", type="password", key="up_p")
-        if st.button("Créer mon compte", type="primary", use_container_width=True):
-            if not e2 or len(p2) < 6:
-                st.warning("E-mail requis et mot de passe d'au moins 6 caractères.")
-            else:
-                do_signup(e2, p2)
-    st.markdown("</div>", unsafe_allow_html=True)
-    st.caption("Tes identifiants sont gérés et chiffrés par Supabase Auth. "
-               "BRICERESEARCH AI ne voit jamais ton mot de passe.")
+    # Colonne centrale étroite : la carte ne doit pas s'étaler sur toute la largeur.
+    _, mid, _ = st.columns([1, 5, 1])
+    with mid:
+        brand_block(hero=True)
+        with st.container(border=True):
+            tab_in, tab_up = st.tabs(["Se connecter", "Créer un compte"])
+            with tab_in:
+                e = st.text_input("E-mail", key="in_e")
+                p = st.text_input("Mot de passe", type="password", key="in_p")
+                if st.button("Se connecter", type="primary", use_container_width=True):
+                    do_login(e, p)
+            with tab_up:
+                e2 = st.text_input("E-mail", key="up_e")
+                p2 = st.text_input("Mot de passe (≥ 6 caractères)", type="password", key="up_p")
+                if st.button("Créer mon compte", type="primary", use_container_width=True):
+                    if not e2 or len(p2) < 6:
+                        st.warning("E-mail requis et mot de passe d'au moins 6 caractères.")
+                    else:
+                        do_signup(e2, p2)
+        st.caption("Tes identifiants sont gérés et chiffrés par Supabase Auth. "
+                   "BRICERESEARCH AI ne voit jamais ton mot de passe.")
 
 def chat_page():
     uid = st.session_state.user_id
