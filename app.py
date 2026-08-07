@@ -82,8 +82,10 @@ FOCUS_HINT = {
 # Clients                                                                      #
 # --------------------------------------------------------------------------- #
 @st.cache_resource
-def groq_client() -> Groq:
-    return Groq(api_key=GROQ_API_KEY)
+def groq_client(api_key: str) -> Groq:
+    """La clé fait partie de la signature : sans elle, le client resterait mémorisé
+    avec l'ancienne valeur et toute mise à jour du secret serait sans effet."""
+    return Groq(api_key=api_key)
 
 def sb_client() -> Client:
     """Client Supabase, avec le jeton de l'utilisateur connecté (pour la RLS)."""
@@ -323,13 +325,21 @@ def login_page():
 # --------------------------------------------------------------------------- #
 # Génération                                                                   #
 # --------------------------------------------------------------------------- #
+def key_fingerprint() -> str:
+    """Décrit la clé lue par l'app sans jamais la divulguer : de quoi distinguer
+    « texte d'exemple », « clé tronquée » et « vraie clé rejetée par Groq »."""
+    k = GROQ_API_KEY or ""
+    return (f"\n\n*(diagnostic : clé lue = {len(k)} caractères, "
+            f"préfixe `gsk_` {'présent' if k.startswith('gsk_') else 'ABSENT'})*")
+
 def friendly_error(e: Exception) -> str:
     """Traduit les pannes courantes en langage compréhensible par un étudiant."""
     s = str(e)
     if "invalid_api_key" in s or "401" in s:
         return ("la clé Groq de l'application est invalide ou a été révoquée. "
                 "Signale-le à la personne qui administre l'application — "
-                "elle doit la mettre à jour dans les secrets Streamlit.")
+                "elle doit la mettre à jour dans les secrets Streamlit."
+                + key_fingerprint())
     if "rate_limit" in s or "429" in s:
         return ("le quota de l'application est atteint pour le moment. "
                 "Réessaie dans quelques minutes.")
@@ -343,7 +353,7 @@ def stream_reply():
     api_msgs = [{"role": "system", "content": sys}] + [
         {"role": m["role"], "content": m["content"]} for m in st.session_state.messages
     ]
-    stream = groq_client().chat.completions.create(
+    stream = groq_client(GROQ_API_KEY).chat.completions.create(
         model=MODEL, messages=api_msgs, temperature=0.4, stream=True)
     for chunk in stream:
         d = chunk.choices[0].delta.content
