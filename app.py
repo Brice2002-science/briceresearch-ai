@@ -1,5 +1,5 @@
 """
-BRICERESEARCH AI — assistant de rédaction scientifique (interface chat)
+BANOUDO AI — assistant de rédaction scientifique (interface chat)
 D'après les Notes de méthodologie de la recherche scientifique du Pr A. B. Fandohan (EForT/UNA).
 
 Fonctionnalités
@@ -42,7 +42,7 @@ SUPABASE_ANON_KEY = secret("SUPABASE_ANON_KEY")
 # Méthodologie (Pr Fandohan) — prompt système                                  #
 # --------------------------------------------------------------------------- #
 SYSTEM_PROMPT = """
-Tu es BRICERESEARCH AI, assistant de rédaction scientifique pour chercheurs francophones
+Tu es BANOUDO AI, assistant de rédaction scientifique pour chercheurs francophones
 (foresterie, écologie, télédétection, environnement). Tu appliques la méthodologie de rédaction
 du Pr Adandé Belarmain Fandohan (École de Foresterie Tropicale, UNA, Bénin).
 
@@ -138,6 +138,16 @@ def db_save_message(conv_id: str, uid: str, role: str, content: str) -> str | No
         st.warning(f"Message non sauvegardé : {e}")
         return None
 
+def db_delete_conversation(conv_id: str) -> bool:
+    """Supprime une discussion. Les messages suivent : la clé étrangère de
+    `messages.conversation_id` est déclarée `on delete cascade` dans schema.sql."""
+    try:
+        sb_client().table("conversations").delete().eq("id", conv_id).execute()
+        return True
+    except Exception as e:
+        st.error(f"Suppression impossible : {e}")
+        return False
+
 def db_delete_message(msg_id: str):
     """Supprime un message : sinon une réponse ratée resterait dans l'historique."""
     try:
@@ -191,109 +201,154 @@ def inject_css():
     st.markdown("""
     <style>
       :root {
-        --bra-ink:#12201C; --bra-muted:#67807A; --bra-green:#0F6B57;
-        --bra-gold:#BE8A2C; --bra-line:rgba(18,32,28,.10); --bra-wash:#F6FAF8;
+        --ink:#0E1A17;          /* texte principal */
+        --muted:#6B837C;        /* texte secondaire */
+        --green:#0F6B57;        /* accent principal */
+        --green-soft:#E8F2EE;   /* fonds teintés */
+        --gold:#B98A34;         /* accent chaud, très parcimonieux */
+        --line:rgba(14,26,23,.09);
+        --line-strong:rgba(14,26,23,.16);
+        --shadow-sm:0 1px 2px rgba(14,26,23,.05);
+        --shadow-md:0 2px 4px rgba(14,26,23,.04), 0 12px 28px -18px rgba(14,26,23,.30);
+        --shadow-lg:0 2px 6px rgba(14,26,23,.05), 0 32px 64px -36px rgba(14,26,23,.35);
+        --r-sm:10px; --r-md:14px; --r-lg:20px;
       }
 
-      /* Barre d'outils Streamlit (Share, étoile, crayon, GitHub, menu ⋮) masquée.
-         On garde l'en-tête lui-même : c'est lui qui porte le bouton d'ouverture
-         de la barre latérale sur mobile. */
+      /* Barre d'outils Streamlit masquée. L'en-tête reste : il porte le bouton
+         d'ouverture de la barre latérale sur mobile. */
       [data-testid="stToolbar"], [data-testid="stToolbarActions"],
       [data-testid="stMainMenu"], [data-testid="stAppDeployButton"],
       [data-testid="stDecoration"], [data-testid="manage-app-button"],
       #MainMenu, footer { display:none !important; }
-      header[data-testid="stHeader"] { background:transparent; height:2.6rem; }
+      header[data-testid="stHeader"] { background:transparent; height:2.4rem; }
       [data-testid="stSidebarCollapseButton"],
       [data-testid="stSidebarCollapsedControl"] { display:flex !important; }
 
-      /* Fond blanc, avec un voile vert à peine perceptible en haut de page */
-      .stApp { background:
-        linear-gradient(180deg, #F3F8F6 0%, #FFFFFF 340px, #FFFFFF 100%); }
+      /* Halo vert diffus en haut de page : de la profondeur sans salir le blanc. */
+      .stApp {
+        background:
+          radial-gradient(60rem 26rem at 50% -14rem, rgba(15,107,87,.10), transparent 70%),
+          #FFFFFF; }
 
-      /* Colonne de lecture : largeur confortable, respiration verticale */
-      .block-container { max-width:47rem; padding-top:3rem; padding-bottom:7rem; }
+      .block-container { max-width:46rem; padding-top:2.6rem; padding-bottom:8rem; }
 
+      body, .stApp { -webkit-font-smoothing:antialiased; color:var(--ink); }
+
+      /* ---------- Barre latérale ---------- */
       section[data-testid="stSidebar"] {
-        background:var(--bra-wash); border-right:1px solid var(--bra-line); }
-      /* Boutons de l'historique : plats, alignés à gauche (le bouton "Nouvelle
-         discussion" est en primary et garde son fond vert). */
+        background:#FBFDFC; border-right:1px solid var(--line); }
+      section[data-testid="stSidebar"] .block-container { padding-top:1.2rem; }
+      section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p strong {
+        font-size:11px; letter-spacing:.09em; text-transform:uppercase;
+        color:var(--muted); font-weight:600; }
       section[data-testid="stSidebar"] .stButton>button:not([kind="primary"]) {
-        background:transparent; border:1px solid transparent; color:var(--bra-ink);
-        text-align:left; justify-content:flex-start; font-weight:450; }
+        background:transparent; border:1px solid transparent; color:var(--ink);
+        text-align:left; justify-content:flex-start; font-weight:450;
+        font-size:13.5px; padding:.34rem .6rem; }
       section[data-testid="stSidebar"] .stButton>button:not([kind="primary"]):hover {
-        background:#FFFFFF; border-color:var(--bra-line); color:var(--bra-green); }
+        background:var(--green-soft); border-color:transparent; color:var(--green); }
       section[data-testid="stSidebar"] .stButton>button[kind="primary"] {
-        margin-bottom:.4rem; }
+        margin-bottom:.7rem; padding:.5rem; }
+      /* Corbeille : invisible au repos, rouge au survol. */
+      section[data-testid="stSidebar"] [data-testid="stPopover"] button {
+        background:transparent; border:none; color:var(--muted);
+        opacity:0; transition:opacity .15s, color .15s; padding:.3rem; min-height:0; }
+      section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:hover
+        [data-testid="stPopover"] button { opacity:.65; }
+      section[data-testid="stSidebar"] [data-testid="stPopover"] button:hover {
+        opacity:1; color:#B4413A; }
 
-      /* Identité */
-      .bra-brand { display:flex; align-items:center; gap:11px; margin:2px 0 20px; }
-      .bra-brand svg { width:36px; height:36px; border-radius:10px; }
-      .bra-brand h2 { font-size:16px; margin:0; color:var(--bra-ink);
-        letter-spacing:-.01em; font-weight:650; }
+      /* ---------- Identité ---------- */
+      .bra-brand { display:flex; align-items:center; gap:10px; margin:0 0 18px; }
+      .bra-brand svg { width:32px; height:32px; border-radius:9px; }
+      .bra-brand h2 { font-size:15px; margin:0; color:var(--ink);
+        letter-spacing:.01em; font-weight:650; }
 
-      .bra-hero { text-align:center; margin:2vh 0 10px; }
-      .bra-hero svg { width:60px; height:60px; border-radius:17px;
-        box-shadow:0 10px 28px -14px rgba(15,107,87,.55); }
-      .bra-hero h1 { font-family:Georgia,'Iowan Old Style','Times New Roman',serif;
-        font-size:30px; font-weight:600; letter-spacing:-.02em;
-        margin:16px 0 0; color:var(--bra-ink); }
+      .bra-hero { text-align:center; margin:1.5vh 0 14px; }
+      .bra-hero svg { width:58px; height:58px; border-radius:17px;
+        box-shadow:0 14px 34px -16px rgba(15,107,87,.6); }
+      .bra-hero h1 {
+        font-family:'Iowan Old Style',Georgia,'Times New Roman',serif;
+        font-size:31px; font-weight:600; letter-spacing:-.015em;
+        margin:18px 0 0; color:var(--ink); }
 
-      /* Messages : l'assistant sur carte verte pâle, l'auteur sur carte blanche */
-      .stChatMessage { background:transparent; padding:.2rem 0; }
+      /* ---------- Messages ---------- */
+      .stChatMessage { background:transparent; padding:.15rem 0; }
       [data-testid="stChatMessageContent"] {
-        font-size:15.5px; line-height:1.7; color:var(--bra-ink); }
+        font-size:15.5px; line-height:1.72; color:var(--ink); }
+      [data-testid="stChatMessageContent"] h1,
+      [data-testid="stChatMessageContent"] h2,
+      [data-testid="stChatMessageContent"] h3 {
+        font-family:'Iowan Old Style',Georgia,serif; letter-spacing:-.01em; }
+      /* Réponse : filet vert à gauche, comme une citation d'appareil critique. */
       .stChatMessage:has([data-testid="stChatMessageAvatarAssistant"]) {
-        background:var(--bra-wash); border:1px solid var(--bra-line);
-        border-radius:16px; padding:.7rem 1.15rem; margin:.4rem 0; }
+        background:linear-gradient(180deg, var(--green-soft), #F4FAF7);
+        border:1px solid var(--line); border-left:2.5px solid var(--green);
+        border-radius:6px var(--r-md) var(--r-md) 6px;
+        padding:.8rem 1.25rem; margin:.5rem 0; }
+      /* Message de l'auteur : carte blanche surélevée. */
       .stChatMessage:has([data-testid="stChatMessageAvatarUser"]) {
-        background:#FFFFFF; border:1px solid var(--bra-line);
-        border-radius:16px; padding:.7rem 1.15rem; margin:.4rem 0;
-        box-shadow:0 1px 2px rgba(18,32,28,.04); }
+        background:#FFFFFF; border:1px solid var(--line);
+        border-radius:var(--r-md); padding:.8rem 1.25rem; margin:.5rem 0;
+        box-shadow:var(--shadow-sm); }
 
-      /* Zone de saisie */
+      /* ---------- Saisie ---------- */
       [data-testid="stChatInput"] {
-        border:1px solid var(--bra-line); border-radius:14px; background:#FFFFFF;
-        box-shadow:0 2px 6px rgba(18,32,28,.05), 0 16px 40px -28px rgba(18,32,28,.35); }
-      [data-testid="stChatInput"]:focus-within { border-color:var(--bra-green); }
+        border:1px solid var(--line-strong); border-radius:var(--r-md);
+        background:#FFFFFF; box-shadow:var(--shadow-md); }
+      [data-testid="stChatInput"]:focus-within {
+        border-color:var(--green);
+        box-shadow:var(--shadow-md), 0 0 0 3px rgba(15,107,87,.10); }
 
-      /* Boutons */
-      .stButton>button { border-radius:10px; font-weight:500; }
+      /* ---------- Boutons ---------- */
+      .stButton>button { border-radius:var(--r-sm); font-weight:500; }
       .stButton>button[kind="primary"] { border:none;
-        box-shadow:0 1px 2px rgba(15,107,87,.25), 0 8px 20px -12px rgba(15,107,87,.7); }
+        box-shadow:0 1px 2px rgba(15,107,87,.22), 0 10px 22px -14px rgba(15,107,87,.75); }
+      .stButton>button[kind="primary"]:hover { filter:brightness(1.07); }
 
-      /* Cartes (st.container(border=True)) — carte de connexion */
+      /* ---------- Cartes ---------- */
       [data-testid="stVerticalBlockBorderWrapper"]:has(.stTabs) {
-        background:#FFFFFF; border:1px solid var(--bra-line); border-radius:20px;
-        padding:6px 22px 10px;
-        box-shadow:0 1px 2px rgba(18,32,28,.04), 0 24px 56px -32px rgba(18,32,28,.30); }
-      .stTabs [data-baseweb="tab-list"] { gap:18px; }
-      .stTabs [data-baseweb="tab-highlight"] { background:var(--bra-green); }
+        background:#FFFFFF; border:1px solid var(--line); border-radius:var(--r-lg);
+        padding:8px 24px 12px; box-shadow:var(--shadow-lg); }
+      .stTabs [data-baseweb="tab-list"] { gap:20px; }
+      .stTabs [data-baseweb="tab-highlight"] { background:var(--green); }
+      .stTabs [data-baseweb="tab"] { font-size:14px; }
 
-      /* Actions sous chaque message : discrètes, elles ne doivent pas
-         concurrencer le texte de la réponse. */
+      /* Pièces jointes : repli discret, pas un bloc lourd. */
+      [data-testid="stExpander"] details {
+        border:1px solid var(--line); border-radius:var(--r-md);
+        background:#FFFFFF; box-shadow:var(--shadow-sm); }
+      [data-testid="stExpander"] summary { font-size:13.5px; color:var(--muted); }
+      [data-testid="stExpander"] summary:hover { color:var(--green); }
+
+      /* ---------- Actions sous chaque message ---------- */
       .bra-actions { margin-top:.1rem; }
       .stChatMessage [data-testid="stPopover"] button,
       .stChatMessage .stButton>button {
-        background:transparent; border:1px solid transparent; color:var(--bra-muted);
+        background:transparent; border:1px solid transparent; color:var(--muted);
         font-size:12px; font-weight:450; padding:.1rem .45rem; min-height:0;
-        border-radius:8px; opacity:.75; }
+        border-radius:8px; opacity:.6; transition:opacity .15s; }
+      .stChatMessage:hover [data-testid="stPopover"] button,
+      .stChatMessage:hover .stButton>button { opacity:.85; }
       .stChatMessage [data-testid="stPopover"] button:hover,
       .stChatMessage .stButton>button:hover {
-        background:#FFFFFF; border-color:var(--bra-line);
-        color:var(--bra-green); opacity:1; }
+        background:#FFFFFF; border-color:var(--line);
+        color:var(--green); opacity:1; }
 
-      .stCaption, [data-testid="stCaptionContainer"] { color:var(--bra-muted); }
-      hr, [data-testid="stDivider"] { border-color:var(--bra-line); }
+      .stCaption, [data-testid="stCaptionContainer"] {
+        color:var(--muted); font-size:12.5px; }
+      hr, [data-testid="stDivider"] { border-color:var(--line); }
+      ::selection { background:rgba(15,107,87,.16); }
     </style>
     """, unsafe_allow_html=True)
 
 def brand_block(hero=False):
     cls = "bra-hero" if hero else "bra-brand"
     if hero:
-        st.markdown(f'<div class="{cls}">{LOGO_SVG}<h1>BRICERESEARCH AI</h1></div>',
+        st.markdown(f'<div class="{cls}">{LOGO_SVG}<h1>BANOUDO AI</h1></div>',
                     unsafe_allow_html=True)
     else:
-        st.markdown(f'<div class="{cls}">{LOGO_SVG}<h2>BRICERESEARCH AI</h2></div>',
+        st.markdown(f'<div class="{cls}">{LOGO_SVG}<h2>BANOUDO AI</h2></div>',
                     unsafe_allow_html=True)
 
 # --------------------------------------------------------------------------- #
@@ -320,7 +375,7 @@ def login_page():
                     else:
                         do_signup(e2, p2)
         st.caption("Tes identifiants sont gérés et chiffrés par Supabase Auth. "
-                   "BRICERESEARCH AI ne voit jamais ton mot de passe.")
+                   "BANOUDO AI ne voit jamais ton mot de passe.")
 
 # --------------------------------------------------------------------------- #
 # Documents joints                                                             #
@@ -421,14 +476,28 @@ def chat_page():
             st.caption("Tes discussions apparaîtront ici dès ton premier message.")
         for c in convs:
             label = (c["title"] or "Sans titre").strip()
-            if len(label) > 32:
-                label = label[:32].rstrip() + "…"
+            if len(label) > 26:
+                label = label[:26].rstrip() + "…"
             active = c["id"] == st.session_state.get("current_conv")
-            if st.button(("●  " if active else "○  ") + label,
-                         key="c_" + c["id"], use_container_width=True):
-                st.session_state.current_conv = c["id"]
-                st.session_state.messages = db_load_messages(c["id"])
-                st.rerun()
+            row, act = st.columns([5, 1], vertical_alignment="center")
+            with row:
+                if st.button(("●  " if active else "○  ") + label,
+                             key="c_" + c["id"], use_container_width=True):
+                    st.session_state.current_conv = c["id"]
+                    st.session_state.messages = db_load_messages(c["id"])
+                    st.rerun()
+            with act:
+                # Confirmation en deux temps : une suppression ne se rattrape pas.
+                with st.popover("🗑", use_container_width=True):
+                    st.caption(f"Supprimer « {label} » et tous ses messages ?")
+                    if st.button("Oui, supprimer définitivement",
+                                 key="del_" + c["id"], type="primary",
+                                 use_container_width=True):
+                        if db_delete_conversation(c["id"]):
+                            if active:
+                                st.session_state.current_conv = None
+                                st.session_state.messages = []
+                            st.rerun()
 
         st.divider()
         st.caption(st.session_state.user_email)
@@ -529,7 +598,7 @@ def chat_page():
 # --------------------------------------------------------------------------- #
 def main():
     icon = str(APP_DIR / "logo-icon.png") if (APP_DIR / "logo-icon.png").exists() else "🌿"
-    st.set_page_config(page_title="BRICERESEARCH AI", page_icon=icon, layout="centered",
+    st.set_page_config(page_title="BANOUDO AI", page_icon=icon, layout="centered",
                        initial_sidebar_state="expanded")
     inject_css()
 

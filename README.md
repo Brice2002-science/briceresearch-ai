@@ -1,8 +1,11 @@
-# BRICERESEARCH AI
+# BANOUDO AI
 
-Assistant de rédaction scientifique (interface chat, fond vert, comptes utilisateurs) fondé sur les
-Notes de méthodologie de la recherche scientifique du **Pr A. B. Fandohan** (EForT/UNA).
+Assistant de rédaction scientifique (interface chat claire, comptes utilisateurs, pièces jointes)
+fondé sur les Notes de méthodologie de la recherche scientifique du **Pr A. B. Fandohan** (EForT/UNA).
 Moteur : **Groq** (llama-3.3-70b). Comptes + sauvegarde des discussions : **Supabase**.
+
+L'application s'appelait auparavant BRICERESEARCH AI ; l'adresse `briceresearch-ai.streamlit.app`
+reste inchangée pour ne casser aucun lien déjà partagé.
 
 ---
 
