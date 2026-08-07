@@ -228,7 +228,6 @@ def inject_css():
       .bra-brand svg { width:36px; height:36px; border-radius:10px; }
       .bra-brand h2 { font-size:16px; margin:0; color:var(--bra-ink);
         letter-spacing:-.01em; font-weight:650; }
-      .bra-brand small { color:var(--bra-muted); font-size:11px; }
 
       .bra-hero { text-align:center; margin:2vh 0 10px; }
       .bra-hero svg { width:60px; height:60px; border-radius:17px;
@@ -292,8 +291,8 @@ def brand_block(hero=False):
         st.markdown(f'<div class="{cls}">{LOGO_SVG}<h1>BRICERESEARCH AI</h1></div>',
                     unsafe_allow_html=True)
     else:
-        st.markdown(f'<div class="{cls}">{LOGO_SVG}<div><h2>BRICERESEARCH AI</h2>'
-                    f'<small>méthodologie Pr Fandohan</small></div></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="{cls}">{LOGO_SVG}<h2>BRICERESEARCH AI</h2></div>',
+                    unsafe_allow_html=True)
 
 # --------------------------------------------------------------------------- #
 # Pages                                                                        #
