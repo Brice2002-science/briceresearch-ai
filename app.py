@@ -14,11 +14,17 @@ Voir README.md pour le déploiement (Streamlit Cloud / Hugging Face Spaces).
 """
 
 import os
+import secrets as pysecrets
 from pathlib import Path
 
 import streamlit as st
 from groq import Groq
 from supabase import create_client, Client
+
+try:                                    # emplacement selon la version de supabase-py
+    from supabase import ClientOptions
+except ImportError:                     # pragma: no cover
+    from supabase.lib.client_options import ClientOptions
 
 MODEL = "llama-3.3-70b-versatile"
 APP_DIR = Path(__file__).parent
@@ -37,6 +43,8 @@ def secret(name: str):
 GROQ_API_KEY = secret("GROQ_API_KEY")
 SUPABASE_URL = secret("SUPABASE_URL")
 SUPABASE_ANON_KEY = secret("SUPABASE_ANON_KEY")
+# Adresse publique de l'app : GitHub doit savoir où renvoyer l'utilisateur.
+APP_URL = (secret("APP_URL") or "https://briceresearch-ai.streamlit.app").rstrip("/")
 
 # --------------------------------------------------------------------------- #
 # Méthodologie (Pr Fandohan) — prompt système                                  #
@@ -154,6 +162,72 @@ def set_session(resp):
         return True
     return False
 
+# ---- Connexion GitHub (OAuth 2.0, flux PKCE) ------------------------------- #
+@st.cache_resource
+def _pkce_store() -> dict:
+    """Partagé entre les sessions : survit au rechargement de page.
+
+    Au retour de GitHub, le navigateur recharge l'app et Streamlit ouvre une
+    NOUVELLE session — st.session_state est donc vide. Le code_verifier PKCE doit
+    pourtant être retrouvé pour échanger le code contre un jeton. On le garde ici,
+    indexé par un `sid` aléatoire transporté dans l'URL de retour.
+    """
+    return {}
+
+class _SidStorage:
+    """Adaptateur de stockage attendu par supabase-auth, adossé à un dict."""
+    def __init__(self, bucket: dict):
+        self._b = bucket
+    def get_item(self, key: str):
+        return self._b.get(key)
+    def set_item(self, key: str, value: str):
+        self._b[key] = value
+    def remove_item(self, key: str):
+        self._b.pop(key, None)
+
+def _oauth_client(sid: str) -> Client:
+    store = _pkce_store().setdefault(sid, {})
+    return create_client(SUPABASE_URL, SUPABASE_ANON_KEY,
+                         options=ClientOptions(flow_type="pkce",
+                                               storage=_SidStorage(store)))
+
+def github_login_url() -> str | None:
+    """URL de consentement GitHub, calculée une seule fois par session."""
+    if st.session_state.get("gh_url"):
+        return st.session_state.gh_url
+    sid = pysecrets.token_urlsafe(16)
+    try:
+        res = _oauth_client(sid).auth.sign_in_with_oauth({
+            "provider": "github",
+            "options": {"redirect_to": f"{APP_URL}?sid={sid}"},
+        })
+        store = _pkce_store()
+        if len(store) > 200:                     # purge grossière, évite la fuite mémoire
+            for k in list(store)[:100]:
+                store.pop(k, None)
+        st.session_state.gh_url = res.url
+        return res.url
+    except Exception:
+        return None
+
+def handle_oauth_return():
+    """Au retour de GitHub : ?code=...&sid=... → session utilisateur."""
+    qp = st.query_params
+    code, sid = qp.get("code"), qp.get("sid")
+    if not code or not sid:
+        return
+    try:
+        res = _oauth_client(sid).auth.exchange_code_for_session({"auth_code": code})
+        if set_session(res):
+            _pkce_store().pop(sid, None)
+            st.query_params.clear()
+            st.rerun()
+        else:
+            st.error("GitHub a répondu, mais aucune session n'a pu être ouverte.")
+    except Exception as e:
+        st.error(f"Connexion GitHub impossible : {e}")
+        st.query_params.clear()
+
 def do_login(email, password):
     try:
         resp = sb_client().auth.sign_in_with_password({"email": email, "password": password})
@@ -264,6 +338,16 @@ def inject_css():
         background:#FFFFFF; border:1px solid var(--bra-line); border-radius:20px;
         padding:6px 22px 10px;
         box-shadow:0 1px 2px rgba(18,32,28,.04), 0 24px 56px -32px rgba(18,32,28,.30); }
+      /* Bouton GitHub + séparateur "ou par e-mail" */
+      [data-testid="stLinkButton"] a {
+        background:#12201C; color:#FFFFFF; border:none; border-radius:10px;
+        font-weight:500; }
+      [data-testid="stLinkButton"] a:hover { background:#000000; color:#FFFFFF; }
+      .bra-sep { display:flex; align-items:center; gap:12px;
+        margin:14px 0 2px; color:var(--bra-muted); font-size:12px; }
+      .bra-sep::before, .bra-sep::after {
+        content:""; flex:1; height:1px; background:var(--bra-line); }
+
       .stTabs [data-baseweb="tab-list"] { gap:18px; }
       .stTabs [data-baseweb="tab-highlight"] { background:var(--bra-green); }
 
@@ -303,6 +387,13 @@ def login_page():
     with mid:
         brand_block(hero=True)
         with st.container(border=True):
+            gh = github_login_url()
+            if gh:
+                st.link_button("＠  Continuer avec GitHub", gh,
+                               use_container_width=True)
+                st.markdown('<div class="bra-sep"><span>ou par e-mail</span></div>',
+                            unsafe_allow_html=True)
+
             tab_in, tab_up = st.tabs(["Se connecter", "Créer un compte"])
             with tab_in:
                 e = st.text_input("E-mail", key="in_e")
@@ -475,6 +566,7 @@ def main():
     if st.session_state.get("user_id"):
         chat_page()
     else:
+        handle_oauth_return()   # avant login_page : peut ouvrir la session et relancer
         login_page()
 
 if __name__ == "__main__":
